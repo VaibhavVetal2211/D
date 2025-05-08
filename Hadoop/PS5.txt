@@ -1,0 +1,71 @@
+package Movie;
+
+
+import java.io.IOException;
+
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.FloatWritable;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+
+public class Movie {
+	public static void main(String[] args) throws Exception{
+		Job job = Job.getInstance(new Configuration(), "Movie Recommender");
+        job.setJarByClass(Movie.class);
+        job.setMapperClass(MapMovie.class);
+        job.setReducerClass(ReduceMovie.class);
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(FloatWritable.class);
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+	}
+	
+	public static class MapMovie extends Mapper<LongWritable, Text, Text, FloatWritable>{
+		public void map(LongWritable key, Text value, Context con) throws IOException, InterruptedException{
+			String curr = value.toString();
+			String[] path = curr.split(",");
+			String movieId = path[1];
+			String rating = path[2];
+			con.write(new Text(movieId), new FloatWritable(Float.parseFloat(rating)));
+		}
+	}
+	
+	public static class ReduceMovie extends Reducer<Text, FloatWritable, Text, FloatWritable>{
+		
+		private float maxRatings = Float.MIN_VALUE;
+		private Text maxRatingId;
+		
+		public void reduce(Text key, Iterable<FloatWritable>value, Context con) throws IOException, InterruptedException{
+			int count = 0;
+			float sum = 0;
+			for(FloatWritable val: value){
+				sum += val.get();
+				count++;
+			}
+			
+			if(maxRatings < (sum/count))
+			{
+				maxRatings = sum/count;
+//				maxRatingId = Integer.parseInt(key.toString());
+				maxRatingId = new Text(key);
+			}
+			
+			float average = sum/count;
+			con.write(key, new FloatWritable(average));
+		}
+		
+		
+		protected void cleanup(Context con) throws IOException, InterruptedException{
+			con.write(new Text("Recommended Movie Id based on user ratings : "+ maxRatingId.toString()),
+					new FloatWritable(maxRatings));
+		}
+	}
+}
+
