@@ -1,0 +1,99 @@
+package LogProcess;
+
+
+import java.io.IOException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.io.IntWritable;
+import org.apache.hadoop.io.LongWritable;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.hadoop.mapreduce.Reducer;
+import org.apache.hadoop.mapreduce.lib.input.FileInputFormat;
+import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
+
+public class LogProcess
+
+{
+	public static void main(String[] args) throws Exception 
+	{
+        Configuration conf = new Configuration();
+        Job job = Job.getInstance(conf, "Login Duration Calculator");
+        job.setJarByClass(LogProcess.class);
+        job.setMapperClass(LogMapper.class);
+        job.setReducerClass(LogReducer.class);
+
+        job.setOutputKeyClass(Text.class);
+        job.setOutputValueClass(IntWritable.class);
+        
+        FileInputFormat.addInputPath(job, new Path(args[0]));
+        FileOutputFormat.setOutputPath(job, new Path(args[1]));
+
+        System.exit(job.waitForCompletion(true) ? 0 : 1);
+	}
+	
+	public static class LogMapper extends Mapper<LongWritable, Text, Text, IntWritable> 
+	{
+	    private static final SimpleDateFormat sdf = new SimpleDateFormat("M/d/yyyy H:mm");
+	   
+	    public void map(LongWritable key, Text value, Context context) throws IOException, InterruptedException 
+	    {
+	        String[] parts = value.toString().split(",");
+	        
+	        try{
+
+		            String ip = parts[1].trim();
+		            
+		            String startTimeStr = parts[5].trim();
+		            String endTimeStr = parts[7].trim();
+		            
+		            Date startTime = sdf.parse(startTimeStr);
+		            Date endTime = sdf.parse(endTimeStr);
+	
+		            int durationInMinutes = (int) ((endTime.getTime() - startTime.getTime()) / (60 * 1000));
+		            
+		            if (durationInMinutes >= 0) 
+		            { 
+		                context.write(new Text(ip) , new IntWritable(durationInMinutes)); 
+		            }
+	        }catch(Exception e){
+	        	
+	        }
+	    }
+	}
+	
+	
+	public static class LogReducer extends Reducer<Text, IntWritable, Text, IntWritable> 
+	{
+
+	    private int maxDuration=0;
+	    private Text maxIp = new Text();
+	    public void reduce(Text key, Iterable<IntWritable> values, Context context) throws IOException, InterruptedException
+	    {
+	    	int totalDuration = 0;
+	        for (IntWritable val : values) 
+	        {
+	            totalDuration += val.get();
+	        }
+	        
+	        if(maxDuration < totalDuration)
+	        {
+	        	maxDuration = totalDuration;
+	        	maxIp.set(key);
+	        }
+	        context.write(key,new IntWritable(totalDuration));
+        }
+	    
+	    protected void cleanup(Context context) throws IOException, InterruptedException 
+	    {
+	        context.write(new Text(" IP : "+maxIp.toString()) , new IntWritable(maxDuration));
+	        
+	        
+	    }
+	}
+}
