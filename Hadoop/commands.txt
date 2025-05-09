@@ -1,0 +1,8 @@
+sudo mount -t vboxsf try try
+
+WORDCOUNT 
+hadoop    fs -put Desktop/input.txt input.txt
+
+hadoop jar WORDCOUNT.jar WORDCOUNT.WORDCOUNT input.txt dir7
+
+output: hadoop fs -cat dir7/part-r-00000
